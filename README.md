@@ -62,8 +62,6 @@ If everything is set up correctly, you should see your new app running in the An
 
 This is one way to run your app — you can also build it directly from Android Studio or Xcode.
 
-
-
 # Weather and News Aggregator App 🌤️📰
 
 This is a React Native app that displays current weather and filters news headlines based on the weather.
@@ -79,6 +77,11 @@ This is a React Native app that displays current weather and filters news headli
 - ⚙️ **Settings Screen**
   - Choose temperature unit (Celsius / Fahrenheit)
   - Select preferred news categories
+
+## 📸 Screenshots
+
+![Home Screen](home.jpg)
+![Settings Screen](setting.jpg)
 
 ## 🛠️ Technologies Used
 
@@ -97,7 +100,8 @@ This is a React Native app that displays current weather and filters news headli
    ```
 
 ## API KEY
-Please Add Your api Key for news and Weather 
+
+Please Add Your api Key for news and Weather
 
 weather - https://openweathermap.org/city/2643743
 news - https://newsapi.org/login

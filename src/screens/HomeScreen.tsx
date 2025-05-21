@@ -1,4 +1,3 @@
-/* eslint-disable curly */
 import React, {useEffect, useState, useContext} from 'react';
 import {
   View,
@@ -9,58 +8,120 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Image,
+  PermissionsAndroid,
+  Platform,
+  ScrollView,
 } from 'react-native';
+import Geolocation from 'react-native-geolocation-service';
 import {AppContext} from '../context/AppContext';
-import {fetchWeather, fetchNews} from '../utils/api';
+import {
+  fetchWeatherByCoords,
+  fetchWeatherForecast,
+  fetchTopHeadlines,
+} from '../utils/api';
 
-const filterNewsByWeather = (weather, news) => {
-  if (weather < 10)
+const filterNewsByWeather = (temp, news) => {
+  if (temp < 10) {
     return news.filter(
       n =>
-        n.title.toLowerCase().includes('death') ||
-        n.title.toLowerCase().includes('loss'),
+        n.title?.toLowerCase().includes('death') ||
+        n.title?.toLowerCase().includes('loss'),
     );
-  if (weather > 30)
+  } else if (temp > 30) {
     return news.filter(
       n =>
-        n.title.toLowerCase().includes('fire') ||
-        n.title.toLowerCase().includes('fear'),
+        n.title?.toLowerCase().includes('fire') ||
+        n.title?.toLowerCase().includes('fear'),
     );
-  return news.filter(
-    n =>
-      n.title.toLowerCase().includes('win') ||
-      n.title.toLowerCase().includes('happy'),
-  );
+  } else {
+    return news.filter(
+      n =>
+        n.title?.toLowerCase().includes('win') ||
+        n.title?.toLowerCase().includes('happy'),
+    );
+  }
+};
+
+const requestLocationPermission = async () => {
+  if (Platform.OS === 'ios') return true;
+
+  try {
+    const granted = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      {
+        title: 'Location Permission',
+        message: 'We need your location to fetch weather info',
+        buttonPositive: 'OK',
+      },
+    );
+    return granted === PermissionsAndroid.RESULTS.GRANTED;
+  } catch (err) {
+    console.warn(err);
+    return false;
+  }
 };
 
 const HomeScreen = () => {
-  const {unit, categories} = useContext(AppContext);
+  const {unit} = useContext(AppContext);
   const [weather, setWeather] = useState(null);
+  const [forecast, setForecast] = useState<any[]>([]);
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const loadData = async () => {
-      try {
-        const weatherData = await fetchWeather('Bengaluru', unit);
-        setWeather(weatherData);
+      const hasPermission = await requestLocationPermission();
+      if (!hasPermission) return;
 
-        const allNews = await Promise.all(
-          categories.map(cat => fetchNews(cat)),
-        );
-        const mergedNews = [].concat(...allNews);
-        const filtered = filterNewsByWeather(weatherData.main.temp, mergedNews);
-        setNews(filtered);
-      } catch (err) {
-        console.error('Failed to load data', err);
-      } finally {
-        setLoading(false);
-      }
+      Geolocation.getCurrentPosition(
+        async position => {
+          const {latitude, longitude} = position.coords;
+
+          const weatherData = await fetchWeatherByCoords(
+            latitude,
+            longitude,
+            unit,
+          );
+          setWeather(weatherData);
+
+          const forecastData = await fetchWeatherForecast(
+            latitude,
+            longitude,
+            unit,
+          );
+
+          const dailyForecastMap: {[date: string]: any} = {};
+          forecastData.list.forEach(({item}: any) => {
+            const date = item.dt_txt.split(' ')[0];
+            const time = item.dt_txt.split(' ')[1];
+            if (!dailyForecastMap[date]) {
+              if (time === '12:00:00') {
+                dailyForecastMap[date] = item;
+              } else {
+                dailyForecastMap[date] = item;
+              }
+            }
+          });
+          const uniqueForecasts = Object.values(dailyForecastMap).slice(0, 5);
+          setForecast(uniqueForecasts);
+
+          const allNews = await fetchTopHeadlines();
+          const filtered = filterNewsByWeather(weatherData.main.temp, allNews);
+          setNews(filtered);
+          setLoading(false);
+        },
+        error => {
+          console.error('Location error:', error);
+          setLoading(false);
+        },
+        {enableHighAccuracy: true, timeout: 15000, maximumAge: 10000},
+      );
     };
-    loadData();
-  }, [unit, categories]);
 
-  const renderItem = ({item}) => (
+    loadData();
+  }, [unit]);
+
+  const renderNewsItem = ({item}: any) => (
     <TouchableOpacity
       onPress={() => Linking.openURL(item.url)}
       style={styles.newsCard}>
@@ -81,7 +142,7 @@ const HomeScreen = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
       {weather && (
         <View style={styles.weatherContainer}>
           <Text style={styles.location}>{weather.name}</Text>
@@ -92,7 +153,22 @@ const HomeScreen = () => {
         </View>
       )}
 
-      <Text style={styles.sectionTitle}>News Based on Weather</Text>
+      {forecast.length > 0 && (
+        <View style={styles.forecastContainer}>
+          <Text style={styles.forecastTitle}>5-Day Forecast</Text>
+          {forecast.map((item, index) => (
+            <View key={index} style={styles.forecastItem}>
+              <Text style={styles.forecastDate}>
+                {item.dt_txt.split(' ')[0]}
+              </Text>
+              <Text>{item.main.temp}°</Text>
+              <Text>{item.weather[0].main}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <Text style={styles.sectionTitle}>Today's Headlines</Text>
 
       {loading ? (
         <ActivityIndicator
@@ -100,20 +176,25 @@ const HomeScreen = () => {
           color="tomato"
           style={{marginTop: 20}}
         />
-      ) : (
+      ) : news.length > 0 ? (
         <FlatList
           data={news}
           keyExtractor={item => item.url}
-          renderItem={renderItem}
+          renderItem={renderNewsItem}
+          scrollEnabled={false}
           contentContainerStyle={styles.newsList}
         />
+      ) : (
+        <Text style={{textAlign: 'center', marginTop: 10}}>
+          No matching news articles found.
+        </Text>
       )}
-    </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
+  container: {padding: 16, backgroundColor: '#fff'},
   weatherContainer: {
     backgroundColor: '#4e8ef5',
     padding: 16,
@@ -124,6 +205,26 @@ const styles = StyleSheet.create({
   location: {fontSize: 20, color: '#fff', fontWeight: '600'},
   temp: {fontSize: 32, color: '#fff', fontWeight: 'bold'},
   condition: {fontSize: 18, color: '#fff', marginTop: 4},
+  forecastContainer: {
+    backgroundColor: '#eef4fd',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 20,
+  },
+  forecastTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    color: '#333',
+  },
+  forecastItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderBottomColor: '#ccc',
+    borderBottomWidth: 0.5,
+    paddingVertical: 6,
+  },
+  forecastDate: {width: 100},
   sectionTitle: {
     fontSize: 20,
     fontWeight: '600',
