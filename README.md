@@ -80,8 +80,8 @@ This is a React Native app that displays current weather and filters news headli
 
 ## 📸 Screenshots
 
-![Home Screen](home.jpg)
-![Settings Screen](setting.jpg)
+![Home Screen](assets/home.jpg)
+![Settings Screen](assets/setting.jpg)
 
 ## 🛠️ Technologies Used
 
